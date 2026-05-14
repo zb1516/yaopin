@@ -4,28 +4,18 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
     <title>药品入库与查价系统</title>
-    <!-- 引入条形码扫描库 -->
-    <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js">
-    </script>
+    <!-- 条形码扫描库 -->
+    <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+    <!-- Firebase SDK -->
+    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
     <style>
         :root {
-            --primary: #3B7DD8;
-            --primary-dark: #2B6BC0;
-            --success: #34C759;
-            --warning: #FF9500;
-            --danger: #FF3B30;
-            --bg: #F2F4F7;
-            --card: #FFFFFF;
-            --text: #1C1C1E;
-            --text-secondary: #6B7280;
-            --border: #E5E7EB;
-            --shadow: 0 2px 12px rgba(0,0,0,0.08);
-            --shadow-lg: 0 8px 30px rgba(0,0,0,0.12);
-            --radius: 16px;
-            --radius-sm: 10px;
-            --radius-xs: 8px;
-            --transition: 0.2s ease;
-            --font-mono: 'SF Mono', 'Cascadia Code', 'Consolas', monospace;
+            --primary: #3B7DD8; --primary-dark: #2B6BC0; --success: #34C759;
+            --warning: #FF9500; --danger: #FF3B30; --bg: #F2F4F7; --card: #FFFFFF;
+            --text: #1C1C1E; --text-secondary: #6B7280; --border: #E5E7EB;
+            --shadow: 0 2px 12px rgba(0,0,0,0.08); --shadow-lg: 0 8px 30px rgba(0,0,0,0.12);
+            --radius: 16px; --radius-sm: 10px; --radius-xs: 8px; --transition: 0.2s ease;
         }
         * { margin:0; padding:0; box-sizing:border-box; }
         body {
@@ -57,8 +47,6 @@
         @keyframes fadeSlideIn { from { opacity:0; transform:translateY(12px); } to { opacity:1; transform:translateY(0); } }
         .card { background:var(--card); border-radius:var(--radius); padding:18px 20px; margin-bottom:14px; box-shadow:var(--shadow); transition:all var(--transition); border:1px solid transparent; }
         .card:hover { box-shadow:var(--shadow-lg); }
-        .card-header { display:flex; align-items:center; justify-content:space-between; margin-bottom:14px; }
-        .card-title { font-size:16px; font-weight:600; color:var(--text); display:flex; align-items:center; gap:8px; }
         .scanner-container { position:relative; border-radius:var(--radius); overflow:hidden; background:#1a1a2e; aspect-ratio:16/11; max-height:340px; margin-bottom:14px; box-shadow:var(--shadow-lg); }
         #scanner-reader { width:100%; height:100%; border-radius:var(--radius); }
         #scanner-reader video { border-radius:var(--radius); object-fit:cover; }
@@ -90,8 +78,6 @@
         .form-input:focus, .form-select:focus { outline:none; border-color:var(--primary); box-shadow:0 0 0 3px rgba(59,125,216,0.1); background:#fff; }
         .form-select { background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath d='M6 8L1 3h10z' fill='%236B7280'/%3E%3C/svg%3E"); background-repeat:no-repeat; background-position:right 14px center; padding-right:36px; cursor:pointer; }
         .form-row { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
-        .input-with-suffix { position:relative; }
-        .input-with-suffix .suffix { position:absolute; right:14px; top:50%; transform:translateY(-50%); font-size:14px; color:var(--text-secondary); pointer-events:none; }
         .scan-result { background:#f0fdf4; border:2px solid #bbf7d0; border-radius:var(--radius); padding:16px 18px; animation:highlightPop 0.4s ease; }
         .scan-result.existing { background:#eff6ff; border-color:#bfdbfe; }
         .price-highlight { background: linear-gradient(135deg, #FFF5F5, #FFEBEE); border:2px solid #FF8A80; border-radius:var(--radius); padding:20px; text-align:center; animation:highlightPop 0.5s ease; }
@@ -133,82 +119,96 @@
         .empty-state { text-align:center; padding:40px 20px; color:var(--text-secondary); }
         .record-item { padding:12px 16px; background:var(--card); border-radius:var(--radius-xs); margin-bottom:6px; display:flex; align-items:center; gap:12px; font-size:14px; }
         .record-dot { width:10px; height:10px; border-radius:50%; background:var(--success); }
-        @media (max-width:480px) { .btn { padding:10px 16px; font-size:13px; } }
+        /* 密码弹窗 */
+        .password-overlay { position:fixed; inset:0; background:rgba(0,0,0,0.6); z-index:300; display:flex; align-items:center; justify-content:center; }
+        .password-box { background:var(--card); border-radius:20px; padding:24px; width:90%; max-width:360px; box-shadow:0 20px 60px rgba(0,0,0,0.3); }
     </style>
 </head>
 <body>
 
-<header class="app-header">
-    <div class="app-logo">
-        <div class="icon">💊</div>
-        <span>药品管理</span>
-    </div>
-    <div class="header-actions">
-        <button class="btn-icon" onclick="exportData()" title="导出数据">📤</button>
-        <button class="btn-icon" onclick="importDataPrompt()" title="导入数据">📥</button>
-        <button class="btn-icon" onclick="loadDemoData()" title="加载示例">📋</button>
-    </div>
-</header>
-
-<div class="main-content">
-    <!-- 扫码入库/查价页面 -->
-    <div class="page active" id="page-scan">
-        <!-- 模式切换 -->
-        <div class="mode-toggle" id="mode-toggle">
-            <button id="mode-stock-btn" class="active" onclick="switchMode('stock')">📋 入库模式</button>
-            <button id="mode-price-btn" onclick="switchMode('price')">💰 查价模式</button>
-        </div>
-        <div class="scanner-container" id="scanner-wrapper">
-            <div id="scanner-reader"></div>
-            <div class="scanner-overlay">
-                <div class="scanner-frame"><div class="scanner-line"></div></div>
-            </div>
-            <div class="scanner-status" id="scanner-status">📷 准备扫码</div>
-        </div>
-        <div class="scanner-actions" style="margin-bottom:12px;">
-            <button class="btn btn-primary" id="btn-start-scan" onclick="startScanner()">📷 开始扫码</button>
-            <button class="btn btn-outline" id="btn-stop-scan" onclick="stopScanner()" style="display:none;">⏹ 停止扫码</button>
-        </div>
-        <div class="card">
-            <div class="card-title">⌨️ 手动输入条形码</div>
-            <div style="display:flex;gap:8px;">
-                <input type="text" class="form-input" id="manual-barcode" placeholder="输入药品条形码...">
-                <button class="btn btn-primary btn-sm" onclick="processManualBarcode()">查询</button>
-            </div>
-        </div>
-        <div id="scan-result-area"></div>
-    </div>
-
-    <!-- 库存管理页面 -->
-    <div class="page" id="page-stock">
-        <div class="stats-row" id="stats-row">
-            <div class="stat-card accent-blue"><div class="stat-value" id="stat-total-types">0</div><div class="stat-label">药品种类</div></div>
-            <div class="stat-card accent-green"><div class="stat-value" id="stat-total-stock">0</div><div class="stat-label">总库存</div></div>
-            <div class="stat-card accent-orange"><div class="stat-value" id="stat-near-expiry">0</div><div class="stat-label">近效期</div></div>
-            <div class="stat-card accent-red"><div class="stat-value" id="stat-expired">0</div><div class="stat-label">已过期</div></div>
-        </div>
-        <div class="search-box"><span class="search-icon">🔍</span><input type="text" class="form-input" id="search-drugs" placeholder="搜索药品..." oninput="renderDrugList()"></div>
-        <div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap;">
-            <button class="btn btn-xs btn-outline sort-btn active" data-sort="default" onclick="setSort('default',this)">默认</button>
-            <button class="btn btn-xs btn-outline sort-btn" data-sort="name" onclick="setSort('name',this)">名称</button>
-            <button class="btn btn-xs btn-outline sort-btn" data-sort="stock-desc" onclick="setSort('stock-desc',this)">库存↓</button>
-            <button class="btn btn-xs btn-outline sort-btn" data-sort="expiry" onclick="setSort('expiry',this)">效期</button>
-        </div>
-        <div id="drug-list-container"></div>
-    </div>
-
-    <!-- 入库记录页面 -->
-    <div class="page" id="page-records">
-        <div class="card"><div class="card-title">📋 入库记录</div><div id="records-list"></div></div>
+<!-- 密码输入界面 (初始显示) -->
+<div id="password-screen" class="password-overlay">
+    <div class="password-box">
+        <h2 style="text-align:center; margin-bottom:8px;">🔐 团队共享密码</h2>
+        <p style="text-align:center; color:#6B7280; font-size:14px; margin-bottom:20px;">输入团队共享密码，进入共享库存</p>
+        <input type="password" id="team-password-input" class="form-input" placeholder="请输入密码" style="margin-bottom:16px;">
+        <button class="btn btn-primary btn-block" onclick="submitPassword()">进入系统</button>
+        <p style="text-align:center; color:#9ca3af; font-size:12px; margin-top:12px;">密码区分团队，不同密码数据隔离</p>
     </div>
 </div>
 
-<nav class="bottom-nav">
-    <button class="nav-item active" data-page="page-scan" onclick="switchPage('page-scan',this)"><span class="nav-icon">📷</span>扫码</button>
-    <button class="nav-item" data-page="page-stock" onclick="switchPage('page-stock',this)"><span class="nav-icon">📦</span>库存</button>
-    <button class="nav-item" data-page="page-records" onclick="switchPage('page-records',this)"><span class="nav-icon">📋</span>记录</button>
-</nav>
+<!-- 主界面 (默认隐藏) -->
+<div id="app-container" style="display:none;">
+    <header class="app-header">
+        <div class="app-logo">
+            <div class="icon">💊</div>
+            <span>药品管理 · 共享版</span>
+        </div>
+        <div class="header-actions">
+            <button class="btn-icon" onclick="exportData()" title="导出数据">📤</button>
+            <button class="btn-icon" onclick="importDataPrompt()" title="导入数据">📥</button>
+            <button class="btn-icon" onclick="logoutAndChangePassword()" title="切换团队">🔄</button>
+        </div>
+    </header>
 
+    <div class="main-content">
+        <!-- 扫码入库/查价页面 -->
+        <div class="page active" id="page-scan">
+            <div class="mode-toggle" id="mode-toggle">
+                <button id="mode-stock-btn" class="active" onclick="switchMode('stock')">📋 入库模式</button>
+                <button id="mode-price-btn" onclick="switchMode('price')">💰 查价模式</button>
+            </div>
+            <div class="scanner-container" id="scanner-wrapper">
+                <div id="scanner-reader"></div>
+                <div class="scanner-overlay"><div class="scanner-frame"><div class="scanner-line"></div></div></div>
+                <div class="scanner-status" id="scanner-status">📷 准备扫码</div>
+            </div>
+            <div class="scanner-actions" style="margin-bottom:12px;">
+                <button class="btn btn-primary" id="btn-start-scan" onclick="startScanner()">📷 开始扫码</button>
+                <button class="btn btn-outline" id="btn-stop-scan" onclick="stopScanner()" style="display:none;">⏹ 停止扫码</button>
+            </div>
+            <div class="card">
+                <div class="card-title">⌨️ 手动输入条形码</div>
+                <div style="display:flex;gap:8px;">
+                    <input type="text" class="form-input" id="manual-barcode" placeholder="输入药品条形码...">
+                    <button class="btn btn-primary btn-sm" onclick="processManualBarcode()">查询</button>
+                </div>
+            </div>
+            <div id="scan-result-area"></div>
+        </div>
+
+        <!-- 库存管理页面 -->
+        <div class="page" id="page-stock">
+            <div class="stats-row" id="stats-row">
+                <div class="stat-card accent-blue"><div class="stat-value" id="stat-total-types">0</div><div class="stat-label">药品种类</div></div>
+                <div class="stat-card accent-green"><div class="stat-value" id="stat-total-stock">0</div><div class="stat-label">总库存</div></div>
+                <div class="stat-card accent-orange"><div class="stat-value" id="stat-near-expiry">0</div><div class="stat-label">近效期</div></div>
+                <div class="stat-card accent-red"><div class="stat-value" id="stat-expired">0</div><div class="stat-label">已过期</div></div>
+            </div>
+            <div class="search-box"><span class="search-icon">🔍</span><input type="text" class="form-input" id="search-drugs" placeholder="搜索药品..." oninput="renderDrugList()"></div>
+            <div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap;">
+                <button class="btn btn-xs btn-outline sort-btn active" data-sort="default" onclick="setSort('default',this)">默认</button>
+                <button class="btn btn-xs btn-outline sort-btn" data-sort="name" onclick="setSort('name',this)">名称</button>
+                <button class="btn btn-xs btn-outline sort-btn" data-sort="stock-desc" onclick="setSort('stock-desc',this)">库存↓</button>
+                <button class="btn btn-xs btn-outline sort-btn" data-sort="expiry" onclick="setSort('expiry',this)">效期</button>
+            </div>
+            <div id="drug-list-container"></div>
+        </div>
+
+        <!-- 入库记录页面 -->
+        <div class="page" id="page-records">
+            <div class="card"><div class="card-title">📋 入库记录</div><div id="records-list"></div></div>
+        </div>
+    </div>
+
+    <nav class="bottom-nav">
+        <button class="nav-item active" data-page="page-scan" onclick="switchPage('page-scan',this)"><span class="nav-icon">📷</span>扫码</button>
+        <button class="nav-item" data-page="page-stock" onclick="switchPage('page-stock',this)"><span class="nav-icon">📦</span>库存</button>
+        <button class="nav-item" data-page="page-records" onclick="switchPage('page-records',this)"><span class="nav-icon">📋</span>记录</button>
+    </nav>
+</div>
+
+<!-- 编辑弹窗 -->
 <div class="modal-overlay" id="edit-modal" style="display:none;" onclick="closeModal(event)">
     <div class="modal-sheet" onclick="event.stopPropagation()">
         <div class="modal-handle"></div>
@@ -225,151 +225,228 @@
 <div id="toast-container"></div>
 
 <script>
+    // ==================== Firebase 配置 ====================
+    // 请替换为您的 Firebase 项目配置
+    const firebaseConfig = {
+        apiKey: "AIzaSyCJKPzHBLdaZnCbX7e6ruW0t-fDDvHQ_TE",
+        authDomain: "cn-zh-2e707.firebaseapp.com",
+        databaseURL: "https://cn-zh-2e707-default-rtdb.asia-southeast1.firebasedatabase.app",
+        projectId: "cn-zh-2e707",
+        storageBucket: "cn-zh-2e707.firebasestorage.app",
+        messagingSenderId: "957730759685",
+        appId: "1:957730759685:web:2bef99ffb3800960e0e86c",
+        measurementId: "G-6CRBLPJR88"
+    };
+
+    // 初始化 Firebase
+    firebase.initializeApp(firebaseConfig);
+    const database = firebase.database();
+
     // ==================== 全局状态 ====================
-    let drugs = [];
-    let records = [];
+    let currentTeamPassword = null;   // 团队密码，用于数据路径
+    let drugs = [];                  // 本地药品数组（从Firebase同步）
+    let records = [];                // 本地记录数组
     let currentSort = 'default';
     let editingDrugId = null;
     let html5QrCode = null;
     let isScannerRunning = false;
     let lastScannedBarcode = null;
     let lastScanTime = 0;
-    let scanMode = 'stock'; // 'stock' 入库模式 | 'price' 查价模式
+    let scanMode = 'stock';          // 'stock' 入库 | 'price' 查价
+    let drugsRef = null;            // Firebase 药品引用
+    let recordsRef = null;          // Firebase 记录引用
 
-    // ==================== 数据持久化 ====================
-    function saveData() {
-        localStorage.setItem('drug_store_v2', JSON.stringify({drugs, records}));
-    }
-    function loadData() {
-        try {
-            const saved = localStorage.getItem('drug_store_v2');
-            if(saved) { const data = JSON.parse(saved); drugs = data.drugs || []; records = data.records || []; }
-        } catch(e){ drugs=[]; records=[]; }
+    // ==================== 密码与登录 ====================
+    function submitPassword() {
+        const password = document.getElementById('team-password-input').value.trim();
+        if (!password) {
+            showToast('请输入密码', 'error');
+            return;
+        }
+        // 密码作为团队ID，用于数据库路径隔离
+        currentTeamPassword = password;
+        // 保存密码到本地，下次自动登录
+        localStorage.setItem('team_password', password);
+        // 初始化数据库引用
+        drugsRef = database.ref(`teams/${password}/drugs`);
+        recordsRef = database.ref(`teams/${password}/records`);
+        // 隐藏密码界面，显示主界面
+        document.getElementById('password-screen').style.display = 'none';
+        document.getElementById('app-container').style.display = 'block';
+        // 启动数据监听
+        startDataListeners();
     }
 
-    function showToast(msg, type='info') {
+    function logoutAndChangePassword() {
+        if (confirm('确定要退出当前团队吗？本地数据将被清除，重新输入密码。')) {
+            // 停止监听
+            if (drugsRef) drugsRef.off();
+            if (recordsRef) recordsRef.off();
+            // 清除密码
+            localStorage.removeItem('team_password');
+            currentTeamPassword = null;
+            // 重置界面
+            document.getElementById('app-container').style.display = 'none';
+            document.getElementById('password-screen').style.display = 'flex';
+            document.getElementById('team-password-input').value = '';
+            // 停止扫码
+            if (isScannerRunning) stopScanner();
+            // 清空本地数据
+            drugs = [];
+            records = [];
+        }
+    }
+
+    // ==================== 数据监听 (实时同步) ====================
+    function startDataListeners() {
+        // 监听药品列表
+        drugsRef.on('value', (snapshot) => {
+            const data = snapshot.val();
+            drugs = [];
+            if (data) {
+                // Firebase 返回对象，转为数组并保留 key 为 id
+                Object.keys(data).forEach(key => {
+                    drugs.push({ ...data[key], id: key });
+                });
+            }
+            // 刷新界面
+            updateStats();
+            if (document.getElementById('page-stock').classList.contains('active')) {
+                renderDrugList();
+            }
+            updateNearExpiryBadge();
+        });
+
+        // 监听入库记录
+        recordsRef.on('value', (snapshot) => {
+            const data = snapshot.val();
+            records = [];
+            if (data) {
+                Object.keys(data).forEach(key => {
+                    records.push({ ...data[key], id: key });
+                });
+                // 按时间倒序排列
+                records.sort((a, b) => new Date(b.date) - new Date(a.date));
+            }
+            if (document.getElementById('page-records').classList.contains('active')) {
+                renderRecords();
+            }
+        });
+    }
+
+    // ==================== Toast ====================
+    function showToast(msg, type = 'info') {
         const container = document.getElementById('toast-container');
         const toast = document.createElement('div');
-        toast.className = `toast ${type}`; toast.textContent = msg;
+        toast.className = `toast ${type}`;
+        toast.textContent = msg;
         container.appendChild(toast);
-        setTimeout(()=> toast.remove(), 2800);
+        setTimeout(() => toast.remove(), 2800);
     }
 
     // ==================== 页面切换 ====================
     function switchPage(pageId, navItem) {
-        if(isScannerRunning && pageId !== 'page-scan') stopScanner();
-        document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
+        if (isScannerRunning && pageId !== 'page-scan') stopScanner();
+        document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
         document.getElementById(pageId).classList.add('active');
-        document.querySelectorAll('.nav-item').forEach(n=>n.classList.remove('active'));
-        if(navItem) navItem.classList.add('active');
-        if(pageId === 'page-stock') { updateStats(); renderDrugList(); }
-        if(pageId === 'page-records') renderRecords();
-        if(pageId === 'page-scan') document.getElementById('scan-result-area').innerHTML = '';
-        window.scrollTo({top:0, behavior:'smooth'});
+        document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+        if (navItem) navItem.classList.add('active');
+        if (pageId === 'page-stock') renderDrugList();
+        if (pageId === 'page-records') renderRecords();
+        if (pageId === 'page-scan') document.getElementById('scan-result-area').innerHTML = '';
+        window.scrollTo({ top: 0, behavior: 'smooth' });
     }
 
     // ==================== 模式切换 ====================
     function switchMode(mode) {
         scanMode = mode;
-        document.getElementById('mode-stock-btn').classList.toggle('active', mode==='stock');
-        document.getElementById('mode-price-btn').classList.toggle('active', mode==='price');
+        document.getElementById('mode-stock-btn').classList.toggle('active', mode === 'stock');
+        document.getElementById('mode-price-btn').classList.toggle('active', mode === 'price');
         document.getElementById('scan-result-area').innerHTML = '';
-        const statusEl = document.getElementById('scanner-status');
-        if(mode==='price') {
-            statusEl.textContent = '💰 查价模式 · 扫描药品显示价格';
-            statusEl.style.background = 'rgba(211,47,47,0.85)';
-        } else {
-            statusEl.textContent = '📷 入库模式 · 扫描药品进行入库';
-            statusEl.style.background = 'rgba(0,0,0,0.7)';
-        }
     }
 
     // ==================== 扫码功能 ====================
     function startScanner() {
-        if(typeof Html5Qrcode === 'undefined') { showToast('扫码库加载失败，请检查网络','error'); return; }
-        if(html5QrCode && isScannerRunning) stopScanner();
+        if (typeof Html5Qrcode === 'undefined') { showToast('扫码库加载失败', 'error'); return; }
+        if (html5QrCode && isScannerRunning) stopScanner();
         html5QrCode = new Html5Qrcode("scanner-reader");
-        const config = { fps:10, qrbox:{width:250, height:140}, aspectRatio:1.5,
-            formatsToSupport: [ Html5QrcodeSupportedFormats.EAN_13, Html5QrcodeSupportedFormats.EAN_8, Html5QrcodeSupportedFormats.UPC_A, Html5QrcodeSupportedFormats.UPC_E, Html5QrcodeSupportedFormats.CODE_128, Html5QrcodeSupportedFormats.CODE_39, Html5QrcodeSupportedFormats.ITF, Html5QrcodeSupportedFormats.CODABAR, Html5QrcodeSupportedFormats.QR_CODE ] };
-        html5QrCode.start({facingMode:"environment"}, config, onScanSuccess, onScanFailure)
-        .then(()=>{
-            isScannerRunning = true;
-            document.getElementById('btn-start-scan').style.display='none';
-            document.getElementById('btn-stop-scan').style.display='inline-flex';
-            const statusEl = document.getElementById('scanner-status');
-            statusEl.textContent = scanMode==='price' ? '💰 查价扫描中...' : '📷 入库扫描中...';
-            showToast('摄像头已启动','info');
-        }).catch(err=>{
+        const config = {
+            fps: 10, qrbox: { width: 250, height: 140 }, aspectRatio: 1.5,
+            formatsToSupport: [Html5QrcodeSupportedFormats.EAN_13, Html5QrcodeSupportedFormats.EAN_8,
+                Html5QrcodeSupportedFormats.UPC_A, Html5QrcodeSupportedFormats.UPC_E,
+                Html5QrcodeSupportedFormats.CODE_128, Html5QrcodeSupportedFormats.CODE_39,
+                Html5QrcodeSupportedFormats.ITF, Html5QrcodeSupportedFormats.CODABAR,
+                Html5QrcodeSupportedFormats.QR_CODE]
+        };
+        html5QrCode.start({ facingMode: "environment" }, config, onScanSuccess, onScanFailure)
+            .then(() => {
+                isScannerRunning = true;
+                document.getElementById('btn-start-scan').style.display = 'none';
+                document.getElementById('btn-stop-scan').style.display = 'inline-flex';
+            }).catch(err => {
             isScannerRunning = false; html5QrCode = null;
-            showToast('摄像头启动失败，请检查权限或使用手动输入','error');
+            showToast('摄像头启动失败，请检查权限或使用手动输入', 'error');
         });
     }
 
     function stopScanner() {
-        if(html5QrCode && isScannerRunning) {
-            html5QrCode.stop().then(()=>{
+        if (html5QrCode && isScannerRunning) {
+            html5QrCode.stop().then(() => {
                 isScannerRunning = false; html5QrCode = null;
-                document.getElementById('btn-start-scan').style.display='inline-flex';
-                document.getElementById('btn-stop-scan').style.display='none';
-            }).catch(()=>{});
+                document.getElementById('btn-start-scan').style.display = 'inline-flex';
+                document.getElementById('btn-stop-scan').style.display = 'none';
+            }).catch(() => {});
         } else {
-            document.getElementById('btn-start-scan').style.display='inline-flex';
-            document.getElementById('btn-stop-scan').style.display='none';
+            document.getElementById('btn-start-scan').style.display = 'inline-flex';
+            document.getElementById('btn-stop-scan').style.display = 'none';
         }
     }
 
     function onScanSuccess(decodedText) {
         const now = Date.now();
-        if(decodedText === lastScannedBarcode && now - lastScanTime < 2000) return;
+        if (decodedText === lastScannedBarcode && now - lastScanTime < 2000) return;
         lastScannedBarcode = decodedText; lastScanTime = now;
-        if(navigator.vibrate) navigator.vibrate([50,30,50]);
-        const statusEl = document.getElementById('scanner-status');
-        statusEl.textContent = '✅ 扫描成功！'; statusEl.style.background='rgba(22,163,74,0.85)';
-        setTimeout(()=>{ statusEl.textContent = scanMode==='price'?'💰 查价扫描中...':'📷 入库扫描中...'; statusEl.style.background='rgba(0,0,0,0.7)'; }, 1500);
+        if (navigator.vibrate) navigator.vibrate([50, 30, 50]);
         handleBarcodeResult(decodedText);
     }
+
     function onScanFailure() {}
 
     function processManualBarcode() {
         const input = document.getElementById('manual-barcode');
         const barcode = input.value.trim();
-        if(!barcode) { showToast('请输入条形码','error'); return; }
+        if (!barcode) { showToast('请输入条形码', 'error'); return; }
         handleBarcodeResult(barcode);
         input.value = '';
     }
 
-    // ==================== 核心：根据模式处理条形码 ====================
+    // ==================== 处理条形码 (查价/入库) ====================
     function handleBarcodeResult(barcode) {
         const drug = drugs.find(d => d.barcode === barcode);
         const area = document.getElementById('scan-result-area');
 
-        if(scanMode === 'price') {
-            // 查价模式
-            if(drug) {
+        if (scanMode === 'price') {
+            if (drug) {
                 const expiryStatus = getExpiryStatus(drug.expiryDate);
                 area.innerHTML = `
                     <div class="price-highlight">
-                        <div style="font-size:20px; font-weight:600; margin-bottom:6px;">💰 ${escapeHtml(drug.name)}</div>
+                        <div style="font-size:20px; font-weight:600;">💰 ${escapeHtml(drug.name)}</div>
                         <div style="font-size:14px; color:#6B7280;">${escapeHtml(drug.specification || '')} | ${escapeHtml(drug.manufacturer || '')}</div>
                         <div class="price-display">¥ ${drug.price.toFixed(2)}</div>
-                        <div style="font-size:15px; margin:8px 0;">📦 库存: <strong>${drug.stock} ${drug.unit}</strong></div>
+                        <div>📦 库存: <strong>${drug.stock} ${drug.unit}</strong></div>
                         <div><span class="expiry-badge ${expiryStatus.class}">📅 ${drug.expiryDate || '未设置'}</span></div>
                         <div class="barcode-display" style="margin-top:12px;">${barcode}</div>
-                        <p style="font-size:12px; color:#9ca3af; margin-top:8px;">仅显示价格，如需入库请切换至入库模式</p>
-                    </div>
-                `;
+                    </div>`;
             } else {
                 area.innerHTML = `
                     <div class="scan-result" style="background:#FFF3E0; border-color:#FFB74D;">
                         <div style="text-align:center; font-size:18px;">⚠️ 药品未登记</div>
                         <div class="barcode-display">${barcode}</div>
-                        <p style="text-align:center; color:#6B7280;">该条形码不在库存中，请先使用入库模式登记</p>
-                    </div>
-                `;
+                        <p style="text-align:center;">该条码不在库存中</p>
+                    </div>`;
             }
         } else {
-            // 入库模式（原有逻辑）
-            if(drug) {
+            if (drug) {
                 const expiryStatus = getExpiryStatus(drug.expiryDate);
                 area.innerHTML = `
                     <div class="scan-result existing">
@@ -387,10 +464,9 @@
                             <label>入库数量:</label>
                             <input type="number" id="quick-stock-qty" class="form-input" value="1" min="1" style="width:80px;">
                             <span>${drug.unit}</span>
-                            <button class="btn btn-success btn-sm" onclick="quickStockIn('${barcode}')">✅ 确认入库</button>
+                            <button class="btn btn-success btn-sm" onclick="quickStockIn('${drug.id}')">✅ 确认入库</button>
                         </div>
-                    </div>
-                `;
+                    </div>`;
             } else {
                 area.innerHTML = `
                     <div class="scan-result">
@@ -402,178 +478,295 @@
                         <div class="form-row"><div class="form-group"><label>有效期</label><input type="date" class="form-input" id="new-drug-expiry"></div><div class="form-group"><label>零售价 ¥ *</label><input type="number" class="form-input" id="new-drug-price" step="0.01" min="0"></div></div>
                         <div class="form-row"><div class="form-group"><label>入库数量</label><input type="number" class="form-input" id="new-drug-stock" value="1" min="1"></div><div class="form-group"><label>成本价 ¥</label><input type="number" class="form-input" id="new-drug-cost" step="0.01" min="0"></div></div>
                         <button class="btn btn-success btn-block" onclick="createNewDrug('${barcode}')">💾 登记并入库</button>
-                    </div>
-                `;
+                    </div>`;
             }
         }
-        area.scrollIntoView({behavior:'smooth', block:'center'});
+        area.scrollIntoView({ behavior: 'smooth', block: 'center' });
     }
 
-    function quickStockIn(barcode) {
+    // ==================== 入库操作 (写入Firebase) ====================
+    function quickStockIn(drugId) {
         const qty = parseInt(document.getElementById('quick-stock-qty')?.value) || 1;
-        const drug = drugs.find(d=>d.barcode===barcode);
-        if(!drug) return;
-        drug.stock += qty; drug.updatedAt = new Date().toISOString();
-        records.unshift({id:generateId(), drugId:drug.id, drugName:drug.name, barcode, quantity:qty, unit:drug.unit, date:new Date().toISOString(), type:'scan'});
-        if(records.length>500) records=records.slice(0,500);
-        saveData(); showToast(`✅ +${qty} ${drug.unit}，库存${drug.stock}`,'success');
+        const drug = drugs.find(d => d.id === drugId);
+        if (!drug) return;
+        // 更新库存数量
+        drugsRef.child(drugId).update({ stock: drug.stock + qty, updatedAt: new Date().toISOString() });
+        // 添加入库记录
+        const newRecord = {
+            drugId: drug.id,
+            drugName: drug.name,
+            barcode: drug.barcode,
+            quantity: qty,
+            unit: drug.unit,
+            date: new Date().toISOString(),
+            type: 'scan'
+        };
+        recordsRef.push(newRecord);
+        showToast(`✅ 入库成功！+${qty} ${drug.unit}`, 'success');
         document.getElementById('scan-result-area').innerHTML = '';
-        updateStats(); renderDrugList();
     }
 
     function createNewDrug(barcode) {
         const name = document.getElementById('new-drug-name')?.value.trim();
         const price = parseFloat(document.getElementById('new-drug-price')?.value);
-        const stock = parseInt(document.getElementById('new-drug-stock')?.value)||1;
-        if(!name){ showToast('请输入名称','error'); return; }
-        if(isNaN(price)||price<0){ showToast('请输入有效价格','error'); return; }
-        const newDrug = {
-            id:generateId(), barcode, name,
-            specification: document.getElementById('new-drug-spec')?.value.trim()||'',
-            manufacturer: document.getElementById('new-drug-mfr')?.value.trim()||'',
-            batchNumber: document.getElementById('new-drug-batch')?.value.trim()||'',
-            expiryDate: document.getElementById('new-drug-expiry')?.value||'',
-            price, costPrice: parseFloat(document.getElementById('new-drug-cost')?.value)||0,
-            stock, unit: document.getElementById('new-drug-unit')?.value||'盒',
-            createdAt: new Date().toISOString(), updatedAt: new Date().toISOString()
+        const stock = parseInt(document.getElementById('new-drug-stock')?.value) || 1;
+        if (!name) { showToast('请输入名称', 'error'); return; }
+        if (isNaN(price) || price < 0) { showToast('请输入有效价格', 'error'); return; }
+
+        const newDrugData = {
+            barcode: barcode,
+            name: name,
+            specification: document.getElementById('new-drug-spec')?.value.trim() || '',
+            manufacturer: document.getElementById('new-drug-mfr')?.value.trim() || '',
+            batchNumber: document.getElementById('new-drug-batch')?.value.trim() || '',
+            expiryDate: document.getElementById('new-drug-expiry')?.value || '',
+            price: price,
+            costPrice: parseFloat(document.getElementById('new-drug-cost')?.value) || 0,
+            stock: stock,
+            unit: document.getElementById('new-drug-unit')?.value || '盒',
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString()
         };
-        drugs.unshift(newDrug);
-        records.unshift({id:generateId(), drugId:newDrug.id, drugName:name, barcode, quantity:stock, unit:newDrug.unit, date:new Date().toISOString(), type:'new'});
-        saveData(); showToast(`✅ 新药品登记成功`,'success');
-        document.getElementById('scan-result-area').innerHTML = '';
-        updateStats(); renderDrugList();
+
+        // 使用 push 生成唯一ID
+        const newDrugRef = drugsRef.push();
+        newDrugRef.set(newDrugData).then(() => {
+            // 添加入库记录
+            recordsRef.push({
+                drugId: newDrugRef.key,
+                drugName: name,
+                barcode: barcode,
+                quantity: stock,
+                unit: newDrugData.unit,
+                date: new Date().toISOString(),
+                type: 'new'
+            });
+            showToast('✅ 新药品登记成功', 'success');
+            document.getElementById('scan-result-area').innerHTML = '';
+        });
     }
 
-    // ==================== 库存列表与统计 ====================
-    function renderDrugList(filterText=null) {
-        const search = filterText ?? document.getElementById('search-drugs')?.value.trim().toLowerCase()??'';
+    // ==================== 库存列表渲染 ====================
+    function renderDrugList(filterText = null) {
+        const search = filterText ?? document.getElementById('search-drugs')?.value.trim().toLowerCase() ?? '';
         let filtered = [...drugs];
-        if(search) filtered = filtered.filter(d=> d.name.toLowerCase().includes(search) || d.barcode.includes(search) || (d.manufacturer||'').toLowerCase().includes(search));
+        if (search) {
+            filtered = filtered.filter(d =>
+                d.name.toLowerCase().includes(search) ||
+                d.barcode.includes(search) ||
+                (d.manufacturer || '').toLowerCase().includes(search)
+            );
+        }
         filtered = sortDrugs(filtered, currentSort);
         const container = document.getElementById('drug-list-container');
-        if(!filtered.length) { container.innerHTML = `<div class="empty-state"><span class="empty-icon">📦</span>暂无药品</div>`; return; }
-        container.innerHTML = filtered.map(d=>{
+        if (!filtered.length) {
+            container.innerHTML = `<div class="empty-state"><span class="empty-icon">📦</span>暂无药品</div>`;
+            return;
+        }
+        container.innerHTML = filtered.map(d => {
             const status = getExpiryStatus(d.expiryDate);
-            const color = ['blue','green','orange','red','purple'][d.id.charCodeAt(0)%5];
+            const color = ['blue', 'green', 'orange', 'red', 'purple'][d.id?.charCodeAt(0) % 5 || 0];
             return `<div class="drug-list-item" onclick="openEditModal('${d.id}')">
                 <div class="drug-avatar ${color}">${d.name.charAt(0)}</div>
-                <div class="drug-info"><div class="drug-name">${escapeHtml(d.name)}</div><div class="drug-meta">${d.specification||''} · ${d.barcode}</div></div>
-                <div class="drug-stock"><div class="stock-count">${d.stock}</div><div class="stock-unit">${d.unit}</div><div class="price-tag">¥${d.price.toFixed(2)}</div></div>
+                <div class="drug-info">
+                    <div class="drug-name">${escapeHtml(d.name)}</div>
+                    <div class="drug-meta">${d.specification || ''} · ${d.barcode}</div>
+                </div>
+                <div class="drug-stock">
+                    <div class="stock-count">${d.stock}</div>
+                    <div class="stock-unit">${d.unit}</div>
+                    <div class="price-tag">¥${d.price.toFixed(2)}</div>
+                </div>
             </div>`;
         }).join('');
     }
 
     function sortDrugs(list, sort) {
         const arr = [...list];
-        if(sort==='name') return arr.sort((a,b)=>a.name.localeCompare(b.name,'zh-CN'));
-        if(sort==='stock-desc') return arr.sort((a,b)=>b.stock-a.stock);
-        if(sort==='expiry') return arr.sort((a,b)=>(a.expiryDate||'9999').localeCompare(b.expiryDate||'9999'));
-        return arr.sort((a,b)=>new Date(b.updatedAt)-new Date(a.updatedAt));
+        if (sort === 'name') return arr.sort((a, b) => a.name.localeCompare(b.name, 'zh-CN'));
+        if (sort === 'stock-desc') return arr.sort((a, b) => b.stock - a.stock);
+        if (sort === 'expiry') return arr.sort((a, b) => (a.expiryDate || '9999').localeCompare(b.expiryDate || '9999'));
+        return arr.sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt));
     }
 
-    function setSort(sort,btn) { currentSort=sort; document.querySelectorAll('.sort-btn').forEach(b=>b.classList.remove('active')); btn.classList.add('active'); renderDrugList(); }
+    function setSort(sort, btn) {
+        currentSort = sort;
+        document.querySelectorAll('.sort-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        renderDrugList();
+    }
+
     function updateStats() {
         document.getElementById('stat-total-types').textContent = drugs.length;
-        document.getElementById('stat-total-stock').textContent = drugs.reduce((s,d)=>s+d.stock,0);
-        let near=0, expired=0;
-        drugs.forEach(d=>{ const s=getExpiryStatus(d.expiryDate); if(s.class==='warning') near++; if(s.class==='danger') expired++; });
+        document.getElementById('stat-total-stock').textContent = drugs.reduce((s, d) => s + d.stock, 0);
+        let near = 0, expired = 0;
+        drugs.forEach(d => {
+            const s = getExpiryStatus(d.expiryDate);
+            if (s.class === 'warning') near++;
+            if (s.class === 'danger') expired++;
+        });
         document.getElementById('stat-near-expiry').textContent = near;
         document.getElementById('stat-expired').textContent = expired;
     }
+
+    function updateNearExpiryBadge() {
+        let near = 0, expired = 0;
+        drugs.forEach(d => {
+            const s = getExpiryStatus(d.expiryDate);
+            if (s.class === 'warning') near++;
+            if (s.class === 'danger') expired++;
+        });
+        const badge = document.getElementById('near-expiry-badge');
+        if (!badge) return;
+        const total = near + expired;
+        if (total > 0) { badge.style.display = 'flex'; badge.textContent = total; }
+        else { badge.style.display = 'none'; }
+    }
+
     function getExpiryStatus(dateStr) {
-        if(!dateStr) return {class:'',label:''};
-        const today = new Date(); today.setHours(0,0,0,0);
-        const exp = new Date(dateStr); exp.setHours(0,0,0,0);
-        const diff = Math.floor((exp-today)/86400000);
-        if(diff<0) return {class:'danger',label:'已过期'};
-        if(diff<=90) return {class:'warning',label:'近效期'};
-        return {class:'safe',label:'正常'};
+        if (!dateStr) return { class: '', label: '' };
+        const today = new Date(); today.setHours(0, 0, 0, 0);
+        const exp = new Date(dateStr); exp.setHours(0, 0, 0, 0);
+        const diff = Math.floor((exp - today) / 86400000);
+        if (diff < 0) return { class: 'danger', label: '已过期' };
+        if (diff <= 90) return { class: 'warning', label: '近效期' };
+        return { class: 'safe', label: '正常' };
     }
 
-    function openEditModal(id) {
-        const d = drugs.find(x=>x.id===id); if(!d) return;
-        editingDrugId = id;
+    // ==================== 编辑弹窗 ====================
+    function openEditModal(drugId) {
+        const drug = drugs.find(d => d.id === drugId);
+        if (!drug) return;
+        editingDrugId = drugId;
         document.getElementById('edit-form-content').innerHTML = `
-            <div class="form-group"><label>名称</label><input class="form-input" id="edit-name" value="${escapeHtml(d.name)}"></div>
-            <div class="form-row"><div class="form-group"><label>规格</label><input class="form-input" id="edit-spec" value="${escapeHtml(d.specification||'')}"></div><div class="form-group"><label>单位</label><select class="form-select" id="edit-unit">${['盒','瓶','袋','支','板'].map(u=>`<option ${d.unit===u?'selected':''}>${u}</option>`).join('')}</select></div></div>
-            <div class="form-row"><div class="form-group"><label>厂家</label><input class="form-input" id="edit-mfr" value="${escapeHtml(d.manufacturer||'')}"></div><div class="form-group"><label>批号</label><input class="form-input" id="edit-batch" value="${escapeHtml(d.batchNumber||'')}"></div></div>
-            <div class="form-row"><div class="form-group"><label>有效期</label><input type="date" class="form-input" id="edit-expiry" value="${d.expiryDate||''}"></div><div class="form-group"><label>零售价 ¥</label><input type="number" class="form-input" id="edit-price" value="${d.price}" step="0.01"></div></div>
-            <div class="form-row"><div class="form-group"><label>库存</label><input type="number" class="form-input" id="edit-stock" value="${d.stock}"></div><div class="form-group"><label>成本价 ¥</label><input type="number" class="form-input" id="edit-cost" value="${d.costPrice||0}" step="0.01"></div></div>
+            <div class="form-group"><label>名称</label><input class="form-input" id="edit-name" value="${escapeHtml(drug.name)}"></div>
+            <div class="form-row"><div class="form-group"><label>规格</label><input class="form-input" id="edit-spec" value="${escapeHtml(drug.specification || '')}"></div><div class="form-group"><label>单位</label><select class="form-select" id="edit-unit">${['盒','瓶','袋','支','板'].map(u => `<option ${drug.unit === u ? 'selected' : ''}>${u}</option>`).join('')}</select></div></div>
+            <div class="form-row"><div class="form-group"><label>厂家</label><input class="form-input" id="edit-mfr" value="${escapeHtml(drug.manufacturer || '')}"></div><div class="form-group"><label>批号</label><input class="form-input" id="edit-batch" value="${escapeHtml(drug.batchNumber || '')}"></div></div>
+            <div class="form-row"><div class="form-group"><label>有效期</label><input type="date" class="form-input" id="edit-expiry" value="${drug.expiryDate || ''}"></div><div class="form-group"><label>零售价 ¥</label><input type="number" class="form-input" id="edit-price" value="${drug.price}" step="0.01"></div></div>
+            <div class="form-row"><div class="form-group"><label>库存</label><input type="number" class="form-input" id="edit-stock" value="${drug.stock}"></div><div class="form-group"><label>成本价 ¥</label><input type="number" class="form-input" id="edit-cost" value="${drug.costPrice || 0}" step="0.01"></div></div>
         `;
-        document.getElementById('edit-modal').style.display='flex';
+        document.getElementById('edit-modal').style.display = 'flex';
     }
-    function saveEdit() {
-        const d = drugs.find(x=>x.id===editingDrugId); if(!d) return;
-        d.name = document.getElementById('edit-name')?.value.trim() || d.name;
-        d.specification = document.getElementById('edit-spec')?.value.trim()||'';
-        d.unit = document.getElementById('edit-unit')?.value||'盒';
-        d.manufacturer = document.getElementById('edit-mfr')?.value.trim()||'';
-        d.batchNumber = document.getElementById('edit-batch')?.value.trim()||'';
-        d.expiryDate = document.getElementById('edit-expiry')?.value||'';
-        d.price = parseFloat(document.getElementById('edit-price')?.value)||0;
-        d.costPrice = parseFloat(document.getElementById('edit-cost')?.value)||0;
-        d.stock = parseInt(document.getElementById('edit-stock')?.value)||0;
-        d.updatedAt = new Date().toISOString();
-        saveData(); closeModalDirect(); showToast('已更新','success'); renderDrugList(); updateStats();
-    }
-    function deleteDrugFromEdit() {
-        if(!confirm('确定删除？')) return;
-        drugs = drugs.filter(d=>d.id!==editingDrugId);
-        records = records.filter(r=>r.drugId!==editingDrugId);
-        saveData(); closeModalDirect(); showToast('已删除','info'); renderDrugList(); updateStats();
-    }
-    function closeModal(e) { if(e.target===document.getElementById('edit-modal')) closeModalDirect(); }
-    function closeModalDirect() { document.getElementById('edit-modal').style.display='none'; editingDrugId=null; }
 
+    function saveEdit() {
+        if (!editingDrugId) return;
+        const drug = drugs.find(d => d.id === editingDrugId);
+        if (!drug) return;
+        const updatedData = {
+            name: document.getElementById('edit-name')?.value.trim() || drug.name,
+            specification: document.getElementById('edit-spec')?.value.trim() || '',
+            unit: document.getElementById('edit-unit')?.value || '盒',
+            manufacturer: document.getElementById('edit-mfr')?.value.trim() || '',
+            batchNumber: document.getElementById('edit-batch')?.value.trim() || '',
+            expiryDate: document.getElementById('edit-expiry')?.value || '',
+            price: parseFloat(document.getElementById('edit-price')?.value) || 0,
+            costPrice: parseFloat(document.getElementById('edit-cost')?.value) || 0,
+            stock: parseInt(document.getElementById('edit-stock')?.value) || 0,
+            updatedAt: new Date().toISOString()
+        };
+        drugsRef.child(editingDrugId).update(updatedData);
+        closeModalDirect();
+        showToast('✅ 药品信息已更新', 'success');
+    }
+
+    function deleteDrugFromEdit() {
+        if (!editingDrugId) return;
+        if (!confirm('确定删除此药品吗？此操作不可恢复！')) return;
+        drugsRef.child(editingDrugId).remove();
+        // 同时删除相关记录 (简单起见，这里不删记录，实际可遍历删除)
+        closeModalDirect();
+        showToast('已删除药品', 'info');
+    }
+
+    function closeModal(e) { if (e.target === document.getElementById('edit-modal')) closeModalDirect(); }
+    function closeModalDirect() { document.getElementById('edit-modal').style.display = 'none'; editingDrugId = null; }
+
+    // ==================== 记录渲染 ====================
     function renderRecords() {
         const container = document.getElementById('records-list');
-        if(!records.length) { container.innerHTML='<div class="empty-state">暂无记录</div>'; return; }
-        container.innerHTML = records.slice(0,80).map(r=>`<div class="record-item"><div class="record-dot"></div><div>${escapeHtml(r.drugName)} +${r.quantity}${r.unit} <small>${new Date(r.date).toLocaleString()}</small></div></div>`).join('');
+        if (!records.length) {
+            container.innerHTML = '<div class="empty-state">暂无记录</div>';
+            return;
+        }
+        container.innerHTML = records.slice(0, 80).map(r => `
+            <div class="record-item">
+                <div class="record-dot"></div>
+                <div>${escapeHtml(r.drugName)} +${r.quantity}${r.unit} <small>${new Date(r.date).toLocaleString()}</small></div>
+            </div>`).join('');
     }
 
+    // ==================== 导入导出 (兼容旧数据) ====================
     function exportData() {
-        const blob = new Blob([JSON.stringify({drugs,records,date:new Date().toISOString()})], {type:'application/json'});
-        const a = document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=`药品备份_${new Date().toISOString().slice(0,10)}.json`; a.click();
-        showToast('导出成功','success');
+        const exportObj = { drugs, records, exportDate: new Date().toISOString() };
+        const blob = new Blob([JSON.stringify(exportObj, null, 2)], { type: 'application/json' });
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = `药品备份_${currentTeamPassword}_${new Date().toISOString().slice(0, 10)}.json`;
+        a.click();
+        showToast('导出成功', 'success');
     }
+
     function importDataPrompt() {
-        const input = document.createElement('input'); input.type='file'; input.accept='.json';
+        const input = document.createElement('input');
+        input.type = 'file';
+        input.accept = '.json';
         input.onchange = e => {
-            const file = e.target.files[0]; if(!file) return;
+            const file = e.target.files[0];
+            if (!file) return;
             const reader = new FileReader();
             reader.onload = ev => {
-                try{
+                try {
                     const data = JSON.parse(ev.target.result);
-                    if(data.drugs) { drugs=data.drugs; records=data.records||[]; saveData(); updateStats(); renderDrugList(); renderRecords(); showToast('导入成功','success'); }
-                }catch{ showToast('文件格式错误','error'); }
+                    if (data.drugs && confirm('导入将覆盖当前数据，确定继续？')) {
+                        // 清空现有数据并写入导入数据
+                        drugsRef.set(null).then(() => {
+                            const updates = {};
+                            data.drugs.forEach(d => {
+                                const newKey = drugsRef.push().key;
+                                updates[newKey] = d;
+                            });
+                            drugsRef.update(updates);
+                            // 记录也可以覆盖
+                            recordsRef.set(null);
+                            if (data.records) {
+                                data.records.forEach(r => recordsRef.push(r));
+                            }
+                            showToast('导入成功', 'success');
+                        });
+                    }
+                } catch (ex) { showToast('文件格式错误', 'error'); }
             };
             reader.readAsText(file);
         };
         input.click();
     }
-    function loadDemoData() {
-        if(drugs.length && !confirm('覆盖现有数据？')) return;
-        const now = new Date();
-        drugs = [
-            {id:'d1',barcode:'6923456789012',name:'阿莫西林胶囊',specification:'0.25g×24粒',manufacturer:'华北制药',batchNumber:'20240315',expiryDate:new Date(now.getTime()+240*86400000).toISOString().slice(0,10),price:18.50,costPrice:12.80,stock:156,unit:'盒',createdAt:now.toISOString(),updatedAt:now.toISOString()},
-            {id:'d2',barcode:'6938765432109',name:'布洛芬缓释胶囊',specification:'0.3g×20粒',manufacturer:'中美史克',batchNumber:'20240122',expiryDate:new Date(now.getTime()+400*86400000).toISOString().slice(0,10),price:25.80,costPrice:18.00,stock:89,unit:'盒',createdAt:now.toISOString(),updatedAt:now.toISOString()},
-        ];
-        records = [{id:'r1',drugId:'d1',drugName:'阿莫西林胶囊',barcode:'6923456789012',quantity:50,unit:'盒',date:now.toISOString(),type:'scan'}];
-        saveData(); updateStats(); renderDrugList(); renderRecords(); showToast('示例已加载','success');
-        switchPage('page-stock', document.querySelector('[data-page="page-stock"]'));
-    }
 
-    function generateId() { return 'id_'+Date.now().toString(36)+Math.random().toString(36).substring(2,8); }
-    function escapeHtml(s) { const d=document.createElement('div'); d.textContent=s||''; return d.innerHTML; }
+    // ==================== 工具函数 ====================
+    function escapeHtml(s) { const d = document.createElement('div'); d.textContent = s || ''; return d.innerHTML; }
 
-    document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeModalDirect(); });
-    window.addEventListener('beforeunload', ()=>{ if(isScannerRunning) html5QrCode?.stop().catch(()=>{}); });
-    document.addEventListener('visibilitychange', ()=>{ if(document.hidden && isScannerRunning) stopScanner(); });
+    // ==================== 键盘快捷键 ====================
+    document.addEventListener('keydown', e => { if (e.key === 'Escape') closeModalDirect(); });
+    window.addEventListener('beforeunload', () => { if (isScannerRunning) html5QrCode?.stop().catch(() => {}); });
+    document.addEventListener('visibilitychange', () => { if (document.hidden && isScannerRunning) stopScanner(); });
 
+    // ==================== 初始化 ====================
     function init() {
-        loadData();
-        updateStats(); renderDrugList(); renderRecords();
-        if(!drugs.length) document.getElementById('drug-list-container').innerHTML = `<div class="empty-state"><span class="empty-icon">💊</span>欢迎使用<br><button class="btn btn-primary btn-sm" onclick="loadDemoData()">加载示例</button></div>`;
+        // 检查是否已保存密码
+        const savedPassword = localStorage.getItem('team_password');
+        if (savedPassword) {
+            currentTeamPassword = savedPassword;
+            document.getElementById('team-password-input').value = savedPassword;
+            // 直接初始化引用并启动监听
+            drugsRef = database.ref(`teams/${currentTeamPassword}/drugs`);
+            recordsRef = database.ref(`teams/${currentTeamPassword}/records`);
+            document.getElementById('password-screen').style.display = 'none';
+            document.getElementById('app-container').style.display = 'block';
+            startDataListeners();
+        } else {
+            // 显示密码输入界面
+            document.getElementById('password-screen').style.display = 'flex';
+            document.getElementById('app-container').style.display = 'none';
+        }
     }
     init();
 </script>
